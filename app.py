@@ -1,10 +1,11 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
-from sklearn.cluster import DBSCAN
+from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
 from sklearn.metrics import (
     silhouette_score,
@@ -12,141 +13,108 @@ from sklearn.metrics import (
     calinski_harabasz_score
 )
 
-# ======================================================
+# =====================================================
 # PAGE CONFIG
-# ======================================================
-
+# =====================================================
 st.set_page_config(
-    page_title="DBSCAN Clustering Dashboard",
+    page_title="Gaussian Mixture Model Dashboard",
+    page_icon="🔥",
     layout="wide"
 )
 
-# ======================================================
-# CUSTOM CSS
-# ======================================================
-
+# =====================================================
+# CSS
+# =====================================================
 st.markdown("""
 <style>
-
-.stApp{
-    background-color:#0B1120;
-}
-
-header[data-testid="stHeader"]{
-    background:transparent;
-}
-
-[data-testid="stSidebar"]{
-    background:#111827;
-}
-
-[data-testid="stSidebar"] *{
-    color:white;
-}
+.stApp{background:#0A0A0A;}
+header[data-testid="stHeader"]{background:transparent;}
+[data-testid="stSidebar"]{background:#111111;}
+[data-testid="stSidebar"] *{color:white !important;}
 
 .main-title{
-    text-align:center;
-    font-size:42px;
-    font-weight:bold;
-    background:linear-gradient(
-        90deg,
-        #10B981,
-        #06B6D4
-    );
-    -webkit-background-clip:text;
-    -webkit-text-fill-color:transparent;
+text-align:center;
+font-size:48px;
+font-weight:bold;
+background:linear-gradient(90deg,#FBBF24,#F59E0B,#EA580C);
+-webkit-background-clip:text;
+-webkit-text-fill-color:transparent;
 }
 
 .subtitle{
-    text-align:center;
-    color:#E5E7EB;
-    font-size:18px;
+text-align:center;
+color:#D1D5DB;
+font-size:18px;
 }
 
 .section-title{
-    color:white;
-    font-size:28px;
-    font-weight:bold;
-    margin-top:20px;
+color:#FBBF24;
+font-size:28px;
+font-weight:bold;
+margin-top:20px;
 }
 
-h1,h2,h3,h4,h5,h6,p,label{
-    color:white !important;
+h1,h2,h3,h4,h5,h6,p,label,span{
+color:white !important;
 }
 
 [data-testid="stMetric"]{
-    background:#1F2937;
-    padding:20px;
-    border-radius:15px;
-    border:1px solid #10B981;
+background:#1A1A1A;
+border:1px solid #FBBF24;
+border-radius:12px;
+padding:15px;
 }
 
 [data-testid="stMetricValue"]{
-    color:#10B981 !important;
+color:#FBBF24 !important;
 }
 
-[data-testid="stMetricLabel"]{
-    color:white !important;
+div[data-baseweb="select"] > div{
+background:#1A1A1A !important;
+border:1px solid #FBBF24 !important;
 }
 
+div[data-baseweb="select"] span{
+color:white !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ======================================================
+# =====================================================
 # HEADER
-# ======================================================
-
-st.markdown(
-    "<div class='main-title'> DBSCAN Customer Segmentation</div>",
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    "<div class='subtitle'>Density Based Clustering on Credit Card Customers</div>",
-    unsafe_allow_html=True
-)
-
+# =====================================================
+st.markdown('<div class="main-title">🔥 Gaussian Mixture Model Clustering</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Soft Customer Segmentation using Mall Customers Dataset</div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# ======================================================
+# =====================================================
 # LOAD DATA
-# ======================================================
-
+# =====================================================
 @st.cache_data
 def load_data():
-    return pd.read_csv("data/creditcard_cleaned.csv")
+    return pd.read_csv("data/mall_cleaned.csv")
 
 df = load_data()
 
-# ======================================================
+# =====================================================
 # SIDEBAR
-# ======================================================
+# =====================================================
+st.sidebar.title("⚙️ Configuration")
 
-st.sidebar.title("⚙️ DBSCAN Settings")
-
-eps = st.sidebar.slider(
-    "Epsilon (eps)",
-    0.1,
-    5.0,
-    1.5,
-    0.1
+n_components = st.sidebar.slider(
+    "Number of Components",
+    2,10,5
 )
 
-min_samples = st.sidebar.slider(
-    "Min Samples",
-    2,
-    50,
-    10
+covariance_type = st.sidebar.selectbox(
+    "Covariance Type",
+    ["full","tied","diag","spherical"]
 )
 
-# ======================================================
-# DATASET OVERVIEW
-# ======================================================
-
-st.markdown(
-    "<div class='section-title'>📁 Dataset Overview</div>",
-    unsafe_allow_html=True
-)
+# =====================================================
+# DATA OVERVIEW
+# =====================================================
+st.markdown('<div class="section-title">📁 Dataset Overview</div>', unsafe_allow_html=True)
 
 c1,c2 = st.columns(2)
 
@@ -155,192 +123,96 @@ with c1:
     st.dataframe(df.head())
 
 with c2:
-    st.subheader("Dataset Shape")
-    st.write(df.shape)
-
-    st.subheader("Missing Values")
+    st.subheader("Dataset Information")
+    st.write("Rows:", df.shape[0])
+    st.write("Columns:", df.shape[1])
+    st.write("Missing Values")
     st.dataframe(df.isnull().sum())
 
 st.subheader("Statistical Summary")
 st.dataframe(df.describe())
 
-# ======================================================
-# CORRELATION HEATMAP
-# ======================================================
+# =====================================================
+# CORRELATION
+# =====================================================
+st.markdown('<div class="section-title">🔥 Correlation Heatmap</div>', unsafe_allow_html=True)
 
-st.markdown(
-    "<div class='section-title'>🔥 Correlation Heatmap</div>",
-    unsafe_allow_html=True
-)
-
-corr_fig = px.imshow(
+fig_corr = px.imshow(
     df.corr(),
-    text_auto=False,
-    color_continuous_scale="Viridis"
+    text_auto=True,
+    color_continuous_scale="YlOrBr"
 )
 
-st.plotly_chart(
-    corr_fig,
-    use_container_width=True
-)
+st.plotly_chart(fig_corr, use_container_width=True)
 
-# ======================================================
+# =====================================================
 # FEATURE DISTRIBUTION
-# ======================================================
+# =====================================================
+st.markdown('<div class="section-title">📈 Feature Distribution</div>', unsafe_allow_html=True)
 
-st.markdown(
-    "<div class='section-title'>📈 Feature Distribution</div>",
-    unsafe_allow_html=True
-)
-
-selected_feature = st.selectbox(
+feature = st.selectbox(
     "Select Feature",
     df.columns
 )
 
-hist_fig = px.histogram(
+fig_hist = px.histogram(
     df,
-    x=selected_feature,
-    nbins=30,
-    color_discrete_sequence=["#10B981"]
+    x=feature,
+    nbins=25,
+    color_discrete_sequence=["#F59E0B"]
 )
 
-st.plotly_chart(
-    hist_fig,
-    use_container_width=True
+st.plotly_chart(fig_hist, use_container_width=True)
+
+# =====================================================
+# GMM MODEL
+# =====================================================
+gmm = GaussianMixture(
+    n_components=n_components,
+    covariance_type=covariance_type,
+    random_state=42
 )
 
-# ======================================================
-# DBSCAN MODEL
-# ======================================================
+gmm.fit(df)
 
-model = DBSCAN(
-    eps=eps,
-    min_samples=min_samples
-)
+clusters = gmm.predict(df)
 
-clusters = model.fit_predict(df)
+probabilities = gmm.predict_proba(df)
 
 df_clustered = df.copy()
 df_clustered["Cluster"] = clusters
 
-# ======================================================
-# CLUSTER INFORMATION
-# ======================================================
-
-n_clusters = len(
-    set(clusters)
-) - (
-    1 if -1 in clusters else 0
-)
-
-noise_points = np.sum(
-    clusters == -1
-)
-
-noise_percentage = (
-    noise_points /
-    len(clusters)
-) * 100
-
-# ======================================================
+# =====================================================
 # METRICS
-# ======================================================
+# =====================================================
+st.markdown('<div class="section-title">📊 Evaluation Metrics</div>', unsafe_allow_html=True)
 
-st.markdown(
-    "<div class='section-title'>📊 Evaluation Metrics</div>",
-    unsafe_allow_html=True
-)
+sil = silhouette_score(df, clusters)
+db = davies_bouldin_score(df, clusters)
+ch = calinski_harabasz_score(df, clusters)
 
 m1,m2,m3 = st.columns(3)
 
-if len(set(clusters)) > 1:
+m1.metric("Silhouette Score", round(sil,3))
+m2.metric("Davies-Bouldin Score", round(db,3))
+m3.metric("Calinski-Harabasz Score", round(ch,2))
 
-    sil = silhouette_score(
-        df,
-        clusters
-    )
+# =====================================================
+# AIC BIC
+# =====================================================
+st.markdown('<div class="section-title">🎯 AIC & BIC</div>', unsafe_allow_html=True)
 
-    db = davies_bouldin_score(
-        df,
-        clusters
-    )
+a1,a2 = st.columns(2)
 
-    ch = calinski_harabasz_score(
-        df,
-        clusters
-    )
+a1.metric("AIC", round(gmm.aic(df),2))
+a2.metric("BIC", round(gmm.bic(df),2))
 
-    m1.metric(
-        "Silhouette Score",
-        round(sil,3)
-    )
+# =====================================================
+# PCA
+# =====================================================
+st.markdown('<div class="section-title">🎯 PCA Visualization</div>', unsafe_allow_html=True)
 
-    m2.metric(
-        "Davies-Bouldin",
-        round(db,3)
-    )
-
-    m3.metric(
-        "Calinski-Harabasz",
-        round(ch,2)
-    )
-
-else:
-
-    m1.metric(
-        "Silhouette Score",
-        "N/A"
-    )
-
-    m2.metric(
-        "Davies-Bouldin",
-        "N/A"
-    )
-
-    m3.metric(
-        "Calinski-Harabasz",
-        "N/A"
-    )
-
-# ======================================================
-# NOISE ANALYSIS
-# ======================================================
-
-st.markdown(
-    "<div class='section-title'>🚨 Noise Analysis</div>",
-    unsafe_allow_html=True
-)
-
-n1,n2,n3 = st.columns(3)
-
-n1.metric(
-    "Clusters Found",
-    n_clusters
-)
-
-n2.metric(
-    "Noise Points",
-    noise_points
-)
-
-n3.metric(
-    "Noise %",
-    f"{noise_percentage:.2f}%"
-)
-
-# ======================================================
-# PCA VISUALIZATION
-# ======================================================
-
-st.markdown(
-    "<div class='section-title'>🎯 PCA Visualization</div>",
-    unsafe_allow_html=True
-)
-
-pca = PCA(
-    n_components=2
-)
+pca = PCA(n_components=2)
 
 pca_data = pca.fit_transform(df)
 
@@ -349,168 +221,172 @@ pca_df = pd.DataFrame(
     columns=["PC1","PC2"]
 )
 
-pca_df["Cluster"] = (
-    clusters.astype(str)
-)
+pca_df["Cluster"] = clusters.astype(str)
 
-pca_fig = px.scatter(
+fig_pca = px.scatter(
     pca_df,
     x="PC1",
     y="PC2",
     color="Cluster",
-    title="DBSCAN Clusters",
+    title="GMM Clusters",
     color_discrete_sequence=px.colors.qualitative.Bold
 )
 
-st.plotly_chart(
-    pca_fig,
-    use_container_width=True
-)
+st.plotly_chart(fig_pca, use_container_width=True)
 
-# ======================================================
+# =====================================================
 # CLUSTER DISTRIBUTION
-# ======================================================
+# =====================================================
+st.markdown('<div class="section-title">📌 Cluster Distribution</div>', unsafe_allow_html=True)
 
-st.markdown(
-    "<div class='section-title'>📌 Cluster Distribution</div>",
-    unsafe_allow_html=True
+counts = pd.Series(clusters).value_counts().sort_index()
+
+fig_bar = px.bar(
+    x=counts.index.astype(str),
+    y=counts.values,
+    color=counts.index.astype(str)
 )
 
-cluster_counts = (
-    pd.Series(clusters)
-    .value_counts()
-    .sort_index()
-)
+st.plotly_chart(fig_bar, use_container_width=True)
 
-bar_fig = px.bar(
-    x=cluster_counts.index.astype(str),
-    y=cluster_counts.values,
-    color=cluster_counts.index.astype(str),
-    labels={
-        "x":"Cluster",
-        "y":"Count"
-    }
-)
+# =====================================================
+# PROBABILITY TABLE
+# =====================================================
+st.markdown('<div class="section-title">🧠 Soft Clustering Probabilities</div>', unsafe_allow_html=True)
 
-st.plotly_chart(
-    bar_fig,
-    use_container_width=True
-)
-
-# ======================================================
-# CLUSTER ANALYSIS
-# ======================================================
-
-st.markdown(
-    "<div class='section-title'>📊 Cluster Analysis</div>",
-    unsafe_allow_html=True
-)
-
-analysis = (
-    df_clustered
-    .groupby("Cluster")
-    .mean()
-)
-
-st.dataframe(analysis)
-
-# ======================================================
-# FILTER CLUSTER
-# ======================================================
-
-selected_cluster = st.selectbox(
-    "Select Cluster",
-    sorted(
-        df_clustered["Cluster"]
-        .unique()
-    )
-)
-
-filtered_df = (
-    df_clustered[
-        df_clustered["Cluster"]
-        == selected_cluster
+prob_df = pd.DataFrame(
+    probabilities,
+    columns=[
+        f"Cluster_{i}_Prob"
+        for i in range(n_components)
     ]
 )
 
+st.dataframe(prob_df.head(20))
+
+# =====================================================
+# PROBABILITY HEATMAP
+# =====================================================
+st.markdown('<div class="section-title">🌡️ Probability Heatmap</div>', unsafe_allow_html=True)
+
+sample_prob = prob_df.head(50)
+
+fig_heat = px.imshow(
+    sample_prob.T,
+    color_continuous_scale="YlOrRd",
+    aspect="auto"
+)
+
+st.plotly_chart(fig_heat, use_container_width=True)
+
+# =====================================================
+# CLUSTER ANALYSIS
+# =====================================================
+st.markdown('<div class="section-title">📊 Cluster Analysis</div>', unsafe_allow_html=True)
+
+analysis = df_clustered.groupby("Cluster").mean()
+
+st.dataframe(analysis)
+
+# =====================================================
+# FILTER CLUSTER
+# =====================================================
+selected_cluster = st.selectbox(
+    "Select Cluster",
+    sorted(df_clustered["Cluster"].unique())
+)
+
+filtered = df_clustered[
+    df_clustered["Cluster"] == selected_cluster
+]
+
 st.write(
     f"Records in Cluster {selected_cluster}:",
-    filtered_df.shape[0]
+    filtered.shape[0]
 )
 
-st.dataframe(
-    filtered_df.head(20)
-)
+st.dataframe(filtered.head(20))
 
-# ======================================================
+# =====================================================
 # DOWNLOAD
-# ======================================================
+# =====================================================
+st.markdown('<div class="section-title">⬇️ Download Results</div>', unsafe_allow_html=True)
 
-st.markdown(
-    "<div class='section-title'>⬇️ Download Results</div>",
-    unsafe_allow_html=True
+final_output = pd.concat(
+    [df_clustered, prob_df],
+    axis=1
+)
+
+csv = final_output.to_csv(index=False)
+
+st.download_button(
+    "Download GMM Results",
+    csv,
+    "gmm_clustered_data.csv",
+    "text/csv"
 )
 
 st.markdown("""
 <style>
 
-/* Buttons */
+/* =======================================
+   NORMAL BUTTONS
+======================================= */
+
 .stButton button{
+
     background:linear-gradient(
         90deg,
-        #8B5CF6,
-        #EC4899
+        #FBBF24,
+        #F59E0B,
+        #EA580C
     ) !important;
 
-    color:white !important;
+    color:black !important;
 
     border:none !important;
 
     border-radius:12px !important;
 
     font-weight:bold !important;
+
+    transition:0.3s;
 }
 
-/* Download Button */
+.stButton button:hover{
+
+    background:linear-gradient(
+        90deg,
+        #EA580C,
+        #F59E0B,
+        #FBBF24
+    ) !important;
+
+    color:white !important;
+
+    transform:scale(1.02);
+}
+
+/* =======================================
+   DOWNLOAD BUTTON
+======================================= */
+
 .stDownloadButton button{
+
     background:linear-gradient(
         90deg,
-        #22C55E,
-        #16A34A
+        #FBBF24,
+        #F59E0B
     ) !important;
 
-    color:white !important;
+    color:black !important;
 
     border:none !important;
 
     border-radius:12px !important;
 
     font-weight:bold !important;
-}
 
-</style>
-""", unsafe_allow_html=True)
-
-
-csv = df_clustered.to_csv(
-    index=False
-)
-
-st.download_button(
-    label="Download Clustered Dataset",
-    data=csv,
-    file_name="clustered_creditcard.csv",
-    mime="text/csv"
-)
-
-
-
-# ======================================================
-# FOOTER
-# ======================================================
-
-st.markdown("---")
-
-st.success(
-    "DBSCAN Clustering Completed Successfully ✅"
-)
+    transition:0.3s;
+}""", unsafe_allow_html=True)
+st.success("Gaussian Mixture Model Completed Successfully ✅")

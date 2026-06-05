@@ -2,136 +2,141 @@ import pandas as pd
 import numpy as np
 import joblib
 
-from sklearn.cluster import DBSCAN
+from sklearn.mixture import GaussianMixture
 from sklearn.metrics import (
     silhouette_score,
     davies_bouldin_score,
     calinski_harabasz_score
 )
 
-# ============================================
+# ==========================================
 # LOAD CLEANED DATA
-# ============================================
+# ==========================================
 
 df = pd.read_csv(
-    "data/creditcard_cleaned.csv"
+    "data/mall_cleaned.csv"
 )
 
 print("Dataset Loaded Successfully")
 print("Shape:", df.shape)
 
-# ============================================
+# ==========================================
 # FEATURES
-# ============================================
+# ==========================================
 
 X = df.copy()
 
-# ============================================
-# DBSCAN PARAMETERS
-# ============================================
+# ==========================================
+# GMM PARAMETERS
+# ==========================================
 
-eps = 1.5
-min_samples = 10
+n_components = 5
 
-# ============================================
+# ==========================================
 # TRAIN MODEL
-# ============================================
+# ==========================================
 
-dbscan = DBSCAN(
-    eps=eps,
-    min_samples=min_samples
+gmm = GaussianMixture(
+    n_components=n_components,
+    covariance_type="full",
+    random_state=42
 )
 
-clusters = dbscan.fit_predict(X)
+gmm.fit(X)
 
-# ============================================
-# ADD CLUSTER LABELS
-# ============================================
+# ==========================================
+# CLUSTER LABELS
+# ==========================================
+
+clusters = gmm.predict(X)
 
 df["Cluster"] = clusters
 
-# ============================================
-# CLUSTER STATISTICS
-# ============================================
+# ==========================================
+# CLUSTER PROBABILITIES
+# ==========================================
 
-n_clusters = len(
-    set(clusters)
-) - (
-    1 if -1 in clusters else 0
+probabilities = gmm.predict_proba(X)
+
+prob_df = pd.DataFrame(
+    probabilities,
+    columns=[
+        f"Cluster_{i}_Probability"
+        for i in range(n_components)
+    ]
 )
 
-n_noise = list(clusters).count(-1)
+# ==========================================
+# COMBINE DATA
+# ==========================================
 
-noise_percentage = (
-    n_noise / len(clusters)
-) * 100
+final_df = pd.concat(
+    [df, prob_df],
+    axis=1
+)
 
-print("\n===== DBSCAN RESULTS =====")
+# ==========================================
+# METRICS
+# ==========================================
+
+silhouette = silhouette_score(
+    X,
+    clusters
+)
+
+davies = davies_bouldin_score(
+    X,
+    clusters
+)
+
+calinski = calinski_harabasz_score(
+    X,
+    clusters
+)
+
+# ==========================================
+# AIC & BIC
+# ==========================================
+
+aic = gmm.aic(X)
+
+bic = gmm.bic(X)
+
+# ==========================================
+# OUTPUT
+# ==========================================
+
+print("\n========== GMM RESULTS ==========")
 
 print(
-    f"Number of Clusters: {n_clusters}"
+    f"Number of Components : {n_components}"
 )
 
 print(
-    f"Noise Points: {n_noise}"
+    f"Silhouette Score : {silhouette:.4f}"
 )
 
 print(
-    f"Noise Percentage: {noise_percentage:.2f}%"
+    f"Davies-Bouldin Score : {davies:.4f}"
 )
 
-# ============================================
-# EVALUATION METRICS
-# ============================================
+print(
+    f"Calinski-Harabasz Score : {calinski:.4f}"
+)
 
-unique_clusters = set(clusters)
+print(
+    f"AIC : {aic:.2f}"
+)
 
-if len(unique_clusters) > 1:
+print(
+    f"BIC : {bic:.2f}"
+)
 
-    silhouette = silhouette_score(
-        X,
-        clusters
-    )
+# ==========================================
+# CLUSTER COUNTS
+# ==========================================
 
-    davies = davies_bouldin_score(
-        X,
-        clusters
-    )
-
-    calinski = calinski_harabasz_score(
-        X,
-        clusters
-    )
-
-    print("\n===== METRICS =====")
-
-    print(
-        f"Silhouette Score: {silhouette:.4f}"
-    )
-
-    print(
-        f"Davies-Bouldin Score: {davies:.4f}"
-    )
-
-    print(
-        f"Calinski-Harabasz Score: {calinski:.4f}"
-    )
-
-else:
-
-    silhouette = None
-    davies = None
-    calinski = None
-
-    print(
-        "\nMetrics cannot be calculated."
-    )
-
-# ============================================
-# CLUSTER DISTRIBUTION
-# ============================================
-
-print("\n===== CLUSTER COUNTS =====")
+print("\n========== CLUSTER COUNTS ==========")
 
 print(
     pd.Series(clusters)
@@ -139,67 +144,76 @@ print(
     .sort_index()
 )
 
-# ============================================
-# SAVE CLUSTERED DATASET
-# ============================================
+# ==========================================
+# SAVE MODEL
+# ==========================================
 
-df.to_csv(
-    "models/clustered_creditcard.csv",
-    index=False
+joblib.dump(
+    gmm,
+    "models/gmm_model.pkl"
 )
 
-# ============================================
+# ==========================================
 # SAVE METRICS
-# ============================================
+# ==========================================
 
 metrics = {
-    "eps": eps,
-    "min_samples": min_samples,
-    "n_clusters": n_clusters,
-    "noise_points": n_noise,
-    "noise_percentage": noise_percentage,
+    "n_components": n_components,
     "silhouette_score": silhouette,
     "davies_bouldin_score": davies,
-    "calinski_harabasz_score": calinski
+    "calinski_harabasz_score": calinski,
+    "aic": aic,
+    "bic": bic
 }
 
 joblib.dump(
     metrics,
-    "models/dbscan_metrics.pkl"
+    "models/gmm_metrics.pkl"
 )
 
-# ============================================
-# SAVE MODEL PARAMETERS
-# ============================================
+# ==========================================
+# SAVE DATASET
+# ==========================================
 
-model_info = {
-    "eps": eps,
-    "min_samples": min_samples
-}
-
-joblib.dump(
-    model_info,
-    "models/dbscan_model.pkl"
+final_df.to_csv(
+    "models/gmm_clustered_data.csv",
+    index=False
 )
 
-# ============================================
+# ==========================================
+# SAVE CLUSTER ANALYSIS
+# ==========================================
+
+cluster_analysis = (
+    final_df
+    .groupby("Cluster")
+    .mean(numeric_only=True)
+)
+
+cluster_analysis.to_csv(
+    "models/gmm_cluster_analysis.csv"
+)
+
+# ==========================================
 # SUCCESS MESSAGE
-# ============================================
+# ==========================================
 
 print("\n===================================")
-print("DBSCAN Training Completed")
+print("Gaussian Mixture Model Trained")
 print("===================================")
 
-print("Saved Files:")
-
 print(
-    "models/clustered_creditcard.csv"
+    "models/gmm_model.pkl"
 )
 
 print(
-    "models/dbscan_metrics.pkl"
+    "models/gmm_metrics.pkl"
 )
 
 print(
-    "models/dbscan_model.pkl"
+    "models/gmm_clustered_data.csv"
+)
+
+print(
+    "models/gmm_cluster_analysis.csv"
 )
