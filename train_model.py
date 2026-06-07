@@ -1,249 +1,220 @@
-
 import pandas as pd
 import numpy as np
 import joblib
 
-from sklearn.cluster import DBSCAN
-from sklearn.metrics import (
-    silhouette_score,
-    davies_bouldin_score,
-    calinski_harabasz_score
-)
+from sklearn.decomposition import PCA
 
-# ============================================
-# LOAD CLEANED DATA
-# ============================================
+# ==========================================
+# LOAD DATA
+# ==========================================
 
 df = pd.read_csv(
-    "data/creditcard_cleaned.csv"
+    "data/breast_cancer_cleaned.csv"
 )
 
 print("Dataset Loaded Successfully")
 print("Shape:", df.shape)
 
-# ============================================
-# FEATURES
-# ============================================
-
-X = df.copy()
-
-# ============================================
-# DBSCAN PARAMETERS
-# ============================================
-
-eps = 1.5
-min_samples = 10
-
-# ============================================
-# TRAIN MODEL
-# ============================================
-
-dbscan = DBSCAN(
-    eps=eps,
-    min_samples=min_samples
-)
-
-clusters = dbscan.fit_predict(X)
-
-# ============================================
-# ADD CLUSTER LABELS
-# ============================================
-
-df["Cluster"] = clusters
-
-# ============================================
-# CLUSTER STATISTICS
-# ============================================
-
-n_clusters = len(
-    set(clusters)
-) - (
-    1 if -1 in clusters else 0
-)
-
-n_noise = list(clusters).count(-1)
-
-noise_percentage = (
-    n_noise / len(clusters)
-) * 100
-
-print("\n===== DBSCAN RESULTS =====")
-
-print(
-    f"Number of Clusters: {n_clusters}"
-)
-
-print(
-    f"Noise Points: {n_noise}"
-)
-
-print(
-    f"Noise Percentage: {noise_percentage:.2f}%"
-)
-
-# ============================================
-# EVALUATION METRICS
-# ============================================
-
-unique_clusters = set(clusters)
-
-if len(unique_clusters) > 1:
-
-    silhouette = silhouette_score(
-        X,
-        clusters
-    )
-
-    davies = davies_bouldin_score(
-        X,
-        clusters
-    )
-
-    calinski = calinski_harabasz_score(
-        X,
-        clusters
-    )
-
-    print("\n===== METRICS =====")
-
-    print(
-        f"Silhouette Score: {silhouette:.4f}"
-    )
-
-    print(
-        f"Davies-Bouldin Score: {davies:.4f}"
-    )
-
-    print(
-        f"Calinski-Harabasz Score: {calinski:.4f}"
-    )
-
-else:
-
-    silhouette = None
-    davies = None
-    calinski = None
-
-    print(
-        "\nMetrics cannot be calculated."
-    )
-
-# ============================================
-# CLUSTER DISTRIBUTION
-# ============================================
-
-print("\n===== CLUSTER COUNTS =====")
-
-print(
-    pd.Series(clusters)
-    .value_counts()
-    .sort_index()
-)
-
-# ============================================
-# SAVE CLUSTERED DATASET
-# ============================================
-
-df.to_csv(
-    "models/clustered_creditcard.csv",
-    index=False
-)
-
-# ============================================
-# SAVE METRICS
-# ============================================
-
-metrics = {
-    "eps": eps,
-    "min_samples": min_samples,
-    "n_clusters": n_clusters,
-    "noise_points": n_noise,
-    "noise_percentage": noise_percentage,
-    "silhouette_score": silhouette,
-    "davies_bouldin_score": davies,
-    "calinski_harabasz_score": calinski
-}
-
-joblib.dump(
-    metrics,
-    "models/dbscan_metrics.pkl"
-)
-
-# ============================================
-# SAVE MODEL PARAMETERS
-# ============================================
-
-model_info = {
-    "eps": eps,
-    "min_samples": min_samples
-}
-
-joblib.dump(
-    model_info,
-    "models/dbscan_model.pkl"
-)
-
-# ============================================
-# SUCCESS MESSAGE
-# ============================================
-
-print("\n===================================")
-print("DBSCAN Training Completed")
-print("===================================")
-
-print("Saved Files:")
-
-print(
-    "models/clustered_creditcard.csv"
-)
-
-print(
-    "models/dbscan_metrics.pkl"
-)
-
-print(
-    "models/dbscan_model.pkl"
-)
-=======
-import pandas as pd
-import joblib
-
-from sklearn.ensemble import IsolationForest
-
-df = pd.read_csv(
-    "data/fraud_cleaned.csv"
-)
+# ==========================================
+# FEATURES & TARGET
+# ==========================================
 
 X = df.drop(
-    columns=["Class"]
+    columns=["target"]
 )
 
-model = IsolationForest(
-    contamination=0.01,
-    random_state=42
+y = df["target"]
+
+print("\nFeature Shape:", X.shape)
+print("Target Shape:", y.shape)
+
+# ==========================================
+# PCA MODEL
+# ==========================================
+
+n_components = X.shape[1]
+
+pca = PCA(
+    n_components=n_components
 )
 
-predictions = model.fit_predict(X)
+X_pca = pca.fit_transform(X)
 
-df["Anomaly"] = predictions
+# ==========================================
+# EXPLAINED VARIANCE
+# ==========================================
 
-df.to_csv(
-    "models/anomaly_results.csv",
-    index=False
+explained_variance = (
+    pca.explained_variance_ratio_
 )
+
+cumulative_variance = np.cumsum(
+    explained_variance
+)
+
+# ==========================================
+# METRICS
+# ==========================================
 
 metrics = {
-    "total_records": len(df),
-    "anomalies":
-    (predictions == -1).sum(),
-    "normal":
-    (predictions == 1).sum()
+    "n_components": n_components,
+    "explained_variance_ratio":
+    explained_variance,
+
+    "cumulative_variance":
+    cumulative_variance,
+
+    "total_variance_retained":
+    cumulative_variance[-1]
 }
+
+# ==========================================
+# LOADINGS
+# ==========================================
+
+loadings = pd.DataFrame(
+    pca.components_.T,
+    columns=[
+        f"PC{i}"
+        for i in range(
+            1,
+            n_components + 1
+        )
+    ],
+    index=X.columns
+)
+
+# ==========================================
+# PCA DATAFRAME
+# ==========================================
+
+pca_df = pd.DataFrame(
+    X_pca,
+    columns=[
+        f"PC{i}"
+        for i in range(
+            1,
+            n_components + 1
+        )
+    ]
+)
+
+pca_df["target"] = y.values
+
+# ==========================================
+# PRINT RESULTS
+# ==========================================
+
+print("\n========== PCA RESULTS ==========")
+
+print(
+    "Number of Components:",
+    n_components
+)
+
+print(
+    "Total Variance Retained:",
+    round(
+        cumulative_variance[-1],
+        4
+    )
+)
+
+print("\nExplained Variance:")
+
+for i,var in enumerate(
+    explained_variance,
+    start=1
+):
+
+    print(
+        f"PC{i}: {var:.4f}"
+    )
+
+# ==========================================
+# SAVE MODEL
+# ==========================================
+
+joblib.dump(
+    pca,
+    "models/pca_model.pkl"
+)
+
+# ==========================================
+# SAVE METRICS
+# ==========================================
 
 joblib.dump(
     metrics,
-    "models/isolation_metrics.pkl"
+    "models/pca_metrics.pkl"
 )
 
-print("Training Completed")
->>>>>>> ebe7da4 (Initial commit)
+# ==========================================
+# SAVE LOADINGS
+# ==========================================
+
+loadings.to_csv(
+    "models/pca_loadings.csv"
+)
+
+# ==========================================
+# SAVE PCA DATASET
+# ==========================================
+
+pca_df.to_csv(
+    "models/pca_transformed.csv",
+    index=False
+)
+
+# ==========================================
+# SAVE VARIANCE TABLE
+# ==========================================
+
+variance_df = pd.DataFrame({
+    "Component": [
+        f"PC{i}"
+        for i in range(
+            1,
+            n_components + 1
+        )
+    ],
+
+    "Explained Variance":
+    explained_variance,
+
+    "Cumulative Variance":
+    cumulative_variance
+})
+
+variance_df.to_csv(
+    "models/pca_variance.csv",
+    index=False
+)
+
+# ==========================================
+# SUCCESS MESSAGE
+# ==========================================
+
+print("\n================================")
+print("PCA Training Completed")
+print("================================")
+
+print(
+    "models/pca_model.pkl"
+)
+
+print(
+    "models/pca_metrics.pkl"
+)
+
+print(
+    "models/pca_loadings.csv"
+)
+
+print(
+    "models/pca_variance.csv"
+)
+
+print(
+    "models/pca_transformed.csv"
+)
