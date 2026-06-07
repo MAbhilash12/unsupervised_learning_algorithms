@@ -1,3 +1,4 @@
+
 import pandas as pd
 import numpy as np
 import joblib
@@ -203,3 +204,46 @@ print(
 print(
     "models/dbscan_model.pkl"
 )
+=======
+import pandas as pd
+import joblib
+
+from sklearn.ensemble import IsolationForest
+
+df = pd.read_csv(
+    "data/fraud_cleaned.csv"
+)
+
+X = df.drop(
+    columns=["Class"]
+)
+
+model = IsolationForest(
+    contamination=0.01,
+    random_state=42
+)
+
+predictions = model.fit_predict(X)
+
+df["Anomaly"] = predictions
+
+df.to_csv(
+    "models/anomaly_results.csv",
+    index=False
+)
+
+metrics = {
+    "total_records": len(df),
+    "anomalies":
+    (predictions == -1).sum(),
+    "normal":
+    (predictions == 1).sum()
+}
+
+joblib.dump(
+    metrics,
+    "models/isolation_metrics.pkl"
+)
+
+print("Training Completed")
+>>>>>>> ebe7da4 (Initial commit)
