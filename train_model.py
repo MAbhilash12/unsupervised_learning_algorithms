@@ -1,249 +1,192 @@
-
 import pandas as pd
 import numpy as np
 import joblib
 
-from sklearn.cluster import DBSCAN
-from sklearn.metrics import (
-    silhouette_score,
-    davies_bouldin_score,
-    calinski_harabasz_score
-)
+from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
 
-# ============================================
-# LOAD CLEANED DATA
-# ============================================
+# ==========================================
+# LOAD DATA
+# ==========================================
 
 df = pd.read_csv(
-    "data/creditcard_cleaned.csv"
+    "data/digits_original.csv"
 )
 
 print("Dataset Loaded Successfully")
 print("Shape:", df.shape)
 
-# ============================================
-# FEATURES
-# ============================================
-
-X = df.copy()
-
-# ============================================
-# DBSCAN PARAMETERS
-# ============================================
-
-eps = 1.5
-min_samples = 10
-
-# ============================================
-# TRAIN MODEL
-# ============================================
-
-dbscan = DBSCAN(
-    eps=eps,
-    min_samples=min_samples
-)
-
-clusters = dbscan.fit_predict(X)
-
-# ============================================
-# ADD CLUSTER LABELS
-# ============================================
-
-df["Cluster"] = clusters
-
-# ============================================
-# CLUSTER STATISTICS
-# ============================================
-
-n_clusters = len(
-    set(clusters)
-) - (
-    1 if -1 in clusters else 0
-)
-
-n_noise = list(clusters).count(-1)
-
-noise_percentage = (
-    n_noise / len(clusters)
-) * 100
-
-print("\n===== DBSCAN RESULTS =====")
-
-print(
-    f"Number of Clusters: {n_clusters}"
-)
-
-print(
-    f"Noise Points: {n_noise}"
-)
-
-print(
-    f"Noise Percentage: {noise_percentage:.2f}%"
-)
-
-# ============================================
-# EVALUATION METRICS
-# ============================================
-
-unique_clusters = set(clusters)
-
-if len(unique_clusters) > 1:
-
-    silhouette = silhouette_score(
-        X,
-        clusters
-    )
-
-    davies = davies_bouldin_score(
-        X,
-        clusters
-    )
-
-    calinski = calinski_harabasz_score(
-        X,
-        clusters
-    )
-
-    print("\n===== METRICS =====")
-
-    print(
-        f"Silhouette Score: {silhouette:.4f}"
-    )
-
-    print(
-        f"Davies-Bouldin Score: {davies:.4f}"
-    )
-
-    print(
-        f"Calinski-Harabasz Score: {calinski:.4f}"
-    )
-
-else:
-
-    silhouette = None
-    davies = None
-    calinski = None
-
-    print(
-        "\nMetrics cannot be calculated."
-    )
-
-# ============================================
-# CLUSTER DISTRIBUTION
-# ============================================
-
-print("\n===== CLUSTER COUNTS =====")
-
-print(
-    pd.Series(clusters)
-    .value_counts()
-    .sort_index()
-)
-
-# ============================================
-# SAVE CLUSTERED DATASET
-# ============================================
-
-df.to_csv(
-    "models/clustered_creditcard.csv",
-    index=False
-)
-
-# ============================================
-# SAVE METRICS
-# ============================================
-
-metrics = {
-    "eps": eps,
-    "min_samples": min_samples,
-    "n_clusters": n_clusters,
-    "noise_points": n_noise,
-    "noise_percentage": noise_percentage,
-    "silhouette_score": silhouette,
-    "davies_bouldin_score": davies,
-    "calinski_harabasz_score": calinski
-}
-
-joblib.dump(
-    metrics,
-    "models/dbscan_metrics.pkl"
-)
-
-# ============================================
-# SAVE MODEL PARAMETERS
-# ============================================
-
-model_info = {
-    "eps": eps,
-    "min_samples": min_samples
-}
-
-joblib.dump(
-    model_info,
-    "models/dbscan_model.pkl"
-)
-
-# ============================================
-# SUCCESS MESSAGE
-# ============================================
-
-print("\n===================================")
-print("DBSCAN Training Completed")
-print("===================================")
-
-print("Saved Files:")
-
-print(
-    "models/clustered_creditcard.csv"
-)
-
-print(
-    "models/dbscan_metrics.pkl"
-)
-
-print(
-    "models/dbscan_model.pkl"
-)
-=======
-import pandas as pd
-import joblib
-
-from sklearn.ensemble import IsolationForest
-
-df = pd.read_csv(
-    "data/fraud_cleaned.csv"
-)
+# ==========================================
+# FEATURES & TARGET
+# ==========================================
 
 X = df.drop(
-    columns=["Class"]
+    columns=["target"]
 )
 
-model = IsolationForest(
-    contamination=0.01,
-    random_state=42
+y = df["target"]
+
+print("\nFeature Shape:", X.shape)
+print("Target Shape:", y.shape)
+
+# ==========================================
+# FEATURE SCALING
+# ==========================================
+
+scaler = StandardScaler()
+
+X_scaled = scaler.fit_transform(X)
+
+# ==========================================
+# TSNE PARAMETERS
+# ==========================================
+
+n_components = 2
+perplexity = 30
+learning_rate = 200
+random_state = 42
+
+# ==========================================
+# TSNE TRANSFORMATION
+# ==========================================
+
+tsne = TSNE(
+    n_components=n_components,
+    perplexity=perplexity,
+    learning_rate=learning_rate,
+    random_state=random_state
 )
 
-predictions = model.fit_predict(X)
+X_tsne = tsne.fit_transform(
+    X_scaled
+)
 
-df["Anomaly"] = predictions
+# ==========================================
+# CREATE TSNE DATAFRAME
+# ==========================================
 
-df.to_csv(
-    "models/anomaly_results.csv",
+tsne_df = pd.DataFrame(
+    X_tsne,
+    columns=[
+        "TSNE1",
+        "TSNE2"
+    ]
+)
+
+tsne_df["target"] = y.values
+
+# ==========================================
+# CLUSTER CENTERS
+# ==========================================
+
+cluster_centers = (
+    tsne_df
+    .groupby("target")
+    [["TSNE1", "TSNE2"]]
+    .mean()
+)
+
+# ==========================================
+# METRICS
+# ==========================================
+
+metrics = {
+    "n_components": n_components,
+    "perplexity": perplexity,
+    "learning_rate": learning_rate,
+    "samples": len(tsne_df),
+    "features": X.shape[1],
+    "classes": len(
+        tsne_df["target"].unique()
+    )
+}
+
+# ==========================================
+# PRINT RESULTS
+# ==========================================
+
+print("\n========== TSNE RESULTS ==========")
+
+print(
+    "Samples:",
+    metrics["samples"]
+)
+
+print(
+    "Features:",
+    metrics["features"]
+)
+
+print(
+    "Classes:",
+    metrics["classes"]
+)
+
+print(
+    "Perplexity:",
+    perplexity
+)
+
+print(
+    "Learning Rate:",
+    learning_rate
+)
+
+# ==========================================
+# SAVE TRANSFORMED DATA
+# ==========================================
+
+tsne_df.to_csv(
+    "models/tsne_transformed.csv",
     index=False
 )
 
-metrics = {
-    "total_records": len(df),
-    "anomalies":
-    (predictions == -1).sum(),
-    "normal":
-    (predictions == 1).sum()
-}
+# ==========================================
+# SAVE CLUSTER CENTERS
+# ==========================================
+
+cluster_centers.to_csv(
+    "models/tsne_cluster_centers.csv"
+)
+
+# ==========================================
+# SAVE METRICS
+# ==========================================
 
 joblib.dump(
     metrics,
-    "models/isolation_metrics.pkl"
+    "models/tsne_metrics.pkl"
 )
 
-print("Training Completed")
->>>>>>> ebe7da4 (Initial commit)
+# ==========================================
+# SAVE SCALER
+# ==========================================
+
+joblib.dump(
+    scaler,
+    "models/scaler.pkl"
+)
+
+# ==========================================
+# SUCCESS MESSAGE
+# ==========================================
+
+print("\n===================================")
+print("t-SNE Transformation Completed")
+print("===================================")
+
+print(
+    "models/tsne_transformed.csv"
+)
+
+print(
+    "models/tsne_cluster_centers.csv"
+)
+
+print(
+    "models/tsne_metrics.pkl"
+)
+
+print(
+    "models/scaler.pkl"
+)
